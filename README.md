@@ -2,6 +2,11 @@
 
 A Windows desktop app for speech bandwidth extension with **AP-BWE** and speech restoration with **Sidon INT8**. Conversion runs locally. Preview the result and use **Save result** to keep a copy.
 
+## Demo
+
+https://github.com/user-attachments/assets/da4619a1-d846-417b-864a-b01607e8b609
+
+
 ## Setup
 
 Install 64-bit [Python 3.10](https://www.python.org/downloads/), then double-click `Setup.cmd`. It installs the app dependencies and FFmpeg, builds `Ilaria Audio Upscaler.exe`, and opens the app. Setup shows overall progress and separate download and installation progress. After setup, open the EXE directly.
