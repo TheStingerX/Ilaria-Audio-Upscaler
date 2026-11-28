@@ -1,6 +1,6 @@
 # Ilaria Audio Upscaler
 
-A Windows desktop app for speech bandwidth extension with **AP-BWE** and speech restoration with **Sidon INT8**. Conversion runs locally. Preview the result and use **Save result** to keep a copy.
+A Windows desktop app for speech bandwidth extension with **AP-BWE**, speech restoration with **Sidon INT8**, and music restoration with **Apollo**. Conversion runs locally. Preview the result and use **Save result** to keep a copy.
 
 ## Demo
 
@@ -15,10 +15,16 @@ Setup enables CUDA automatically when a compatible NVIDIA GPU is available. It f
 
 ## Use
 
-1. Choose **Sidon** for speech restoration or **AP-BWE** for bandwidth extension. Select a model profile for AP-BWE.
-2. Use **Download Sidon INT8** or **Download checkpoint** if the model is missing. Downloads are stored in `App/checkpoints`. Sidon INT8 needs approximately 286 MiB.
-3. Add audio, choose an output format, and click **Enhance audio**.
+1. Choose **Sidon** for speech restoration with denoising, **AP-BWE** for speech bandwidth extension, or **Apollo** for music degraded by lossy compression. Select a model profile for AP-BWE.
+2. Use the model download button if the weights are missing. Downloads are stored in `App/checkpoints`. Sidon INT8 needs approximately 286 MiB.
+3. Add audio, choose an output format (WAV defaults to 24-bit PCM, with 16-bit PCM also available), and click **Enhance audio**.
 4. Audition the original and the result. Use **Save result** to choose where to keep the converted file. Unsaved previews are temporary.
+
+## Recent changes
+
+- **Apollo** restores compressed music at 44.1 kHz with CPU or NVIDIA CUDA support.
+- **WAV export** supports PCM 24-bit (default) and PCM 16-bit.
+- The player includes play, pause, stop, click-to-seek, dragging, and rates from 0.25× to 32×.
 
 ## Upstream projects
 
@@ -26,7 +32,6 @@ Setup enables CUDA automatically when a compatible NVIDIA GPU is available. It f
 - [Sidon-ONNX](https://huggingface.co/soniqo/Sidon-ONNX) by Soniqo, exported from [Sidon](https://github.com/sarulab-speech/Sidon). See the model card for model licensing and attribution.
 - [Speech Core](https://github.com/soniqo/speech-core) documents the Sidon feature extraction used as a reference for this integration.
 
-Model weights, audio files, Python environments, and built executables are excluded from this source package.
+- [Apollo](https://github.com/JusperLee/Apollo) by Kai Li and Yi Luo. The vendored architecture and adapted chunking are under CC BY-SA 4.0. See `App/apollo_vendor/LICENSE` and `App/apollo_vendor/UPSTREAM.txt`.
 
-
-
+The repository excludes model weights, audio files, Python environments, and built executables. The Windows ZIP includes the launcher and setup. Setup installs the runtime locally, and the app downloads each model on demand.

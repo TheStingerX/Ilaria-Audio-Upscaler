@@ -21,10 +21,14 @@ def sidon_ready(folder):
 
 
 def download_sidon(folder, progress, cancelled):
+    return download_assets(folder, ASSETS, BASE, progress, cancelled)
+
+
+def download_assets(folder, assets, base_url, progress, cancelled):
     folder.mkdir(parents=True, exist_ok=True)
-    total = sum(size for size, _ in ASSETS.values())
+    total = sum(size for size, _ in assets.values())
     received = 0
-    for name, (size, expected_hash) in ASSETS.items():
+    for name, (size, expected_hash) in assets.items():
         destination = folder / name
         if asset_ready(destination, size):
             received += size
@@ -35,7 +39,7 @@ def download_sidon(folder, progress, cancelled):
         temporary = NamedTemporaryFile(dir=folder, suffix=".part", delete=False)
         pending = Path(temporary.name)
         try:
-            request = Request(f"{BASE}/{name}", headers={"User-Agent": "Ilaria Audio Upcaler"})
+            request = Request(f"{base_url}/{name}", headers={"User-Agent": "Ilaria Audio Upcaler"})
             with temporary, urlopen(request, timeout=30) as response:
                 progress(received, total)
                 while not cancelled():

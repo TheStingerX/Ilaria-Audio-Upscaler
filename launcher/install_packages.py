@@ -9,8 +9,8 @@ def install(group, requirements, index_options):
     with TemporaryDirectory(prefix="ilaria-setup-") as wheels:
         print(f"Download     [--------------------] {group}", flush=True)
         subprocess.run(
-            [*pip, "download", "--progress-bar", "on", "--only-binary=:all:",
-             "--dest", wheels, *index_options, *requirements],
+            [*pip, "wheel", "--progress-bar", "on",
+             "--wheel-dir", wheels, *index_options, *requirements],
             check=True,
         )
         print(f"Download     [####################] {group} complete", flush=True)

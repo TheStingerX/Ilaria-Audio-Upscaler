@@ -5,15 +5,16 @@ from tempfile import TemporaryDirectory, mkdtemp
 import sys
 
 from PySide6.QtCore import QIODevice, QSaveFile, QStandardPaths, QEasingCurve, QPropertyAnimation, QSettings, QThread, QUrl, Qt, Signal
-from PySide6.QtGui import QCursor, QDesktopServices, QIcon
+from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QListWidget,
     QMainWindow, QProgressBar, QPushButton, QScrollArea, QSizePolicy, QSlider, QStyle, QStyleOptionSlider, QVBoxLayout, QWidget,
 )
 
+from apollo_assets import APOLLO_URL, apollo_ready
 from sidon_assets import sidon_ready
-from studio_formats import OUTPUT_FORMATS
+from studio_formats import DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS
 
 ROOT = Path(__file__).resolve().parent
 
@@ -140,6 +141,12 @@ class Batch(QThread):
                 engine = Sidon(self.checkpoint, self.device)
                 process = engine.enhance
                 device = engine.device
+            elif self.profile == "apollo":
+                from studio_apollo import Apollo
+
+                engine = Apollo(self.checkpoint, self.device)
+                process = engine.enhance
+                device = engine.device
             else:
                 from studio_engine import enhance, load_model
 
@@ -216,6 +223,11 @@ class CheckpointDownload(QThread):
                 from sidon_assets import download_sidon
 
                 saved = download_sidon(self.destination, self.update, self.isInterruptionRequested)
+            elif self.profile == "apollo":
+                from apollo_assets import download_apollo
+
+                saved = download_apollo(self.destination, progress=self.update,
+                                        cancelled=self.isInterruptionRequested)
             else:
                 saved = download_checkpoint(self.profile, self.destination, self.update,
                                             self.isInterruptionRequested)
@@ -266,7 +278,7 @@ class Studio(QMainWindow):
         self.setAcceptDrops(True)
         self.settings = QSettings("AP-BWE Studio", "Studio")
         self.results_directory = TemporaryDirectory(prefix="ilaria-audio-", ignore_cleanup_errors=True)
-        self.engine_results = {"ap-bwe": {}, "sidon": {}}
+        self.engine_results = {"ap-bwe": {}, "sidon": {}, "apollo": {}}
         self.preview_source = None
         self.worker = None
         self.gpu_scan = None
@@ -287,7 +299,21 @@ class Studio(QMainWindow):
         layout.setSpacing(6 if compact else 13)
         self.heading = label("Ilaria Audio Upscaler", "compactTitle" if compact else "title")
         self.engine_description = label("", "muted")
-        layout.addWidget(self.heading)
+        header = QHBoxLayout()
+        header.setSpacing(12)
+        self.header_image = QLabel()
+        self.header_image.setAccessibleName("Ilaria")
+        portrait_size = 42 if compact else 50
+        self.header_image.setFixedSize(portrait_size, portrait_size)
+        portrait = QPixmap(str(ROOT / "icon.png"))
+        self.header_image.setPixmap(portrait.scaled(
+            portrait_size, portrait_size, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        ))
+        header.addWidget(self.header_image, alignment=Qt.AlignmentFlag.AlignVCenter)
+        header.addWidget(self.heading)
+        header.addStretch()
+        layout.addLayout(header)
         layout.addWidget(self.engine_description)
 
         work_area = QHBoxLayout()
@@ -322,6 +348,7 @@ class Studio(QMainWindow):
         self.engine = QComboBox()
         self.engine.addItem("Sidon", "sidon")
         self.engine.addItem("AP-BWE", "ap-bwe")
+        self.engine.addItem("Apollo", "apollo")
         self.engine.setCurrentIndex(self.engine.findData("sidon"))
         selectors.addWidget(self.engine, 1, 0)
         self.engine.currentIndexChanged.connect(self.engine_changed)
@@ -366,7 +393,7 @@ class Studio(QMainWindow):
         config.addLayout(weight_actions)
         self.weights_button = self.button(weight_actions, "Choose checkpoint…", self.choose_checkpoint)
         self.button(weight_actions, "Official weights ↗",
-                    lambda: QDesktopServices.openUrl(QUrl(SIDON_URL if self.is_sidon() else WEIGHTS)))
+                    self.open_model_page)
         self.download_button = self.button(config, "Download checkpoint", self.download_action)
         self.download_bar = QProgressBar()
         self.download_bar.setFixedHeight(7)
@@ -419,7 +446,8 @@ class Studio(QMainWindow):
         self.output_format = QComboBox()
         self.output_format.addItems(list(OUTPUT_FORMATS))
         self.output_format.view().setObjectName("outputFormats")
-        self.output_format.setCurrentText(self.settings.value("output_format", "WAV (PCM)"))
+        saved_format = self.settings.value("output_format", DEFAULT_OUTPUT_FORMAT)
+        self.output_format.setCurrentText(saved_format if saved_format in OUTPUT_FORMATS else DEFAULT_OUTPUT_FORMAT)
         self.output_format.currentTextChanged.connect(
             lambda value: self.settings.setValue("output_format", value)
         )
@@ -472,22 +500,34 @@ class Studio(QMainWindow):
         self.now_playing.setText("Select a file to preview it.")
 
     def place_device_selector(self):
-        sidon = self.is_sidon()
-        if sidon:
+        fixed_profile = self.engine.currentData() != "ap-bwe"
+        if fixed_profile:
             self.selectors.addWidget(self.device_label, 0, 1)
             self.selectors.addWidget(self.device, 1, 1)
         else:
             self.device_row_layout.insertWidget(1, self.device_label)
             self.device_row_layout.insertWidget(2, self.device)
-        self.device_row.setVisible(not sidon)
+        self.device_row.setVisible(not fixed_profile)
 
-    def is_sidon(self):
-        return self.engine.currentData() == "sidon"
+    def open_model_page(self):
+        urls = {"sidon": SIDON_URL, "apollo": APOLLO_URL, "ap-bwe": WEIGHTS}
+        QDesktopServices.openUrl(QUrl(urls[self.engine.currentData()]))
+
+    def model_profile(self):
+        engine = self.engine.currentData()
+        return self.profile.currentData() if engine == "ap-bwe" else engine
+
+    def checkpoint_destination(self):
+        profile = self.model_profile()
+        folder = {"sidon": "Sidon-INT8", "apollo": "Apollo"}.get(profile, f"g_{profile}")
+        return ROOT / "checkpoints" / folder
 
     def checkpoint(self):
-        if self.is_sidon():
-            folder = ROOT / "checkpoints" / "Sidon-INT8"
-            return folder if sidon_ready(folder) else None
+        engine = self.engine.currentData()
+        if engine != "ap-bwe":
+            folder = self.checkpoint_destination()
+            ready = sidon_ready if engine == "sidon" else apollo_ready
+            return folder if ready(folder) else None
         profile = self.profile.currentData()
         saved = self.settings.value(f"checkpoint/{profile}", "")
         if saved and Path(saved).is_file():
@@ -529,21 +569,29 @@ class Studio(QMainWindow):
         checkpoint = self.checkpoint()
         busy = self.worker is not None
         selected = self.selection()
-        sidon = self.is_sidon()
-        self.engine_description.setText(
-            "Restore speech with background noise or reverb." if sidon else
-            "Extend the high frequencies of speech with AP-BWE."
-        )
-        self.profile_label.setVisible(not sidon)
-        self.profile.setVisible(not sidon)
-        self.weights_button.setVisible(not sidon)
+        engine = self.engine.currentData()
+        ap_bwe = engine == "ap-bwe"
+        descriptions = {
+            "sidon": "Restore speech with background noise or reverb.",
+            "ap-bwe": "Extend the high frequencies of speech with AP-BWE.",
+            "apollo": "Restore music degraded by lossy compression.",
+        }
+        self.engine_description.setText(descriptions[engine])
+        self.profile_label.setVisible(ap_bwe)
+        self.profile.setVisible(ap_bwe)
+        self.weights_button.setVisible(ap_bwe)
         downloading = isinstance(self.worker, CheckpointDownload)
-        if not downloading and sidon:
-            self.weights_status.setText("Sidon INT8 ready · speech restoration to 48 kHz" if checkpoint else
-                                        "Sidon INT8 required · 286 MiB download")
-        elif not downloading:
-            self.weights_status.setText(f"Checkpoint available · {checkpoint.name}" if checkpoint else
-                                        "Checkpoint required for this profile.")
+        if not downloading:
+            if engine == "sidon":
+                status = ("Sidon INT8 ready · speech restoration to 48 kHz" if checkpoint else
+                          "Sidon INT8 required · 286 MiB download")
+            elif engine == "apollo":
+                status = ("Apollo ready · music restoration at 44.1 kHz" if checkpoint else
+                          "Apollo required · 63.5 MiB download")
+            else:
+                status = (f"Checkpoint available · {checkpoint.name}" if checkpoint else
+                          "Checkpoint required for this profile.")
+            self.weights_status.setText(status)
         device_ready = self.device.currentText() != "CUDA" or self.gpu.currentData() is not None
         self.start.setEnabled(bool(self.files.count() and checkpoint and not busy and device_ready))
         self.gpu.setEnabled(not busy and self.gpu.currentData() is not None)
@@ -553,8 +601,9 @@ class Studio(QMainWindow):
             self.download_button.setText("Cancelling download…" if cancelling else "Cancel download")
             self.download_button.setEnabled(not cancelling)
         else:
-            ready_text = "Sidon already available" if sidon else "Checkpoint already available"
-            download_text = "Download Sidon INT8" if sidon else "Download checkpoint"
+            model_name = {"sidon": "Sidon INT8", "apollo": "Apollo"}.get(engine, "checkpoint")
+            ready_text = f"{model_name[0].upper()}{model_name[1:]} already available"
+            download_text = f"Download {model_name}"
             self.download_button.setText(ready_text if checkpoint else download_text)
             self.download_button.setEnabled(not busy and checkpoint is None)
         self.remove_button.setEnabled(selected is not None and not busy)
@@ -699,11 +748,11 @@ class Studio(QMainWindow):
     def start_download(self):
         if self.worker is not None or self.checkpoint():
             return
-        profile = "sidon" if self.is_sidon() else self.profile.currentData()
-        destination = ROOT / "checkpoints" / ("Sidon-INT8" if self.is_sidon() else f"g_{profile}")
+        profile = self.model_profile()
+        destination = self.checkpoint_destination()
         self.download_bar.setRange(0, 0)
         self.download_bar.show()
-        self.weights_status.setText("Connecting to Hugging Face…" if self.is_sidon() else "Connecting to Google Drive…")
+        self.weights_status.setText("Connecting to Hugging Face…" if profile in ("sidon", "apollo") else "Connecting to Google Drive…")
         self.status.setText("Downloading checkpoint…")
         self.worker = CheckpointDownload(profile, destination, self)
         self.worker.message.connect(self.download_message)
@@ -743,7 +792,7 @@ class Studio(QMainWindow):
         device = self.gpu.currentData() if self.device.currentText() == "CUDA" else self.device.currentText()
         if device is None:
             return
-        profile = "sidon" if self.is_sidon() else self.profile.currentData()
+        profile = self.model_profile()
         self.worker = Batch(files, Path(self.results_directory.name), profile, checkpoint,
                             device, self.output_format.currentText(), self)
         self.worker.message.connect(self.status.setText)
@@ -813,33 +862,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

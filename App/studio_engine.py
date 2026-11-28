@@ -67,7 +67,7 @@ def enhance(source, destination, model, h, device, progress, cancelled, encoder_
         context = rate // 4
         wav = staging / "enhanced.wav"
         with sf.SoundFile(wav, mode="w", samplerate=h.hr_sampling_rate,
-                          channels=audio.shape[1], subtype="PCM_16") as output:
+                          channels=audio.shape[1], subtype="PCM_24") as output:
             for start in range(0, len(audio), step):
                 if cancelled():
                     return False

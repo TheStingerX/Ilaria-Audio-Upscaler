@@ -3,8 +3,12 @@ import shutil
 import subprocess
 
 
+DEFAULT_OUTPUT_FORMAT = "WAV (PCM 24-bit)"
+
+
 OUTPUT_FORMATS = {
-    "WAV (PCM)": (".wav", ()),
+    DEFAULT_OUTPUT_FORMAT: (".wav", ()),
+    "WAV (PCM 16-bit)": (".wav", ("-c:a", "pcm_s16le")),
     "FLAC": (".flac", ("-c:a", "flac")),
     "MP3": (".mp3", ("-c:a", "libmp3lame", "-q:a", "2")),
     "M4A (AAC)": (".m4a", ("-c:a", "aac", "-b:a", "192k")),
@@ -49,4 +53,3 @@ def convert_audio(source, destination, encoder_options, cancelled):
             detail = stderr.decode("utf-8", errors="replace").strip()
             raise RuntimeError(detail or "FFmpeg could not convert the audio.")
     return True
-

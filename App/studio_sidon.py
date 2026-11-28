@@ -71,7 +71,7 @@ class Sidon:
             context = INPUT_RATE // 2
             wav = staging / "enhanced.wav"
             with sf.SoundFile(wav, mode="w", samplerate=OUTPUT_RATE,
-                              channels=audio.shape[1], subtype="PCM_16") as output:
+                              channels=audio.shape[1], subtype="PCM_24") as output:
                 for start in range(0, samples.shape[-1], step):
                     end = min(start + step, samples.shape[-1])
                     left = max(0, start - context)
@@ -89,8 +89,6 @@ class Sidon:
                     output.write(np.stack(channels, axis=1))
                     progress(0.95 * end / samples.shape[-1])
             cleaned = staging / "denoised.wav"
-            if not convert_audio(wav, cleaned, ("-af", DENOISE_FILTER, "-c:a", "pcm_s16le"), cancelled):
+            if not convert_audio(wav, cleaned, ("-af", DENOISE_FILTER, "-c:a", "pcm_s24le"), cancelled):
                 return False
             return finish_audio(cleaned, destination, encoder_options, progress, cancelled)
-
-
